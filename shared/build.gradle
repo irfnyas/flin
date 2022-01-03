@@ -1,0 +1,60 @@
+plugins {
+    id "org.jetbrains.kotlin.multiplatform"
+}
+
+kotlin {
+    targets {
+        final def iOSTarget = System.getenv("SDK_NAME")?.startsWith("iphoneos") 
+            ? presets.iosArm64 
+            : presets.iosX64
+
+        fromPreset(iOSTarget, "iOS") {
+            binaries {
+                framework {
+                    baseName = "shared"
+                }
+            }
+        }
+
+        fromPreset(presets.jvm, "android")
+    }
+
+    sourceSets {
+        commonMain.dependencies {}
+        androidMain.dependencies {}
+        iosMain.dependencies {}
+    }
+}
+
+repositories {
+    google()
+    jcenter()
+    maven { url "https://kotlin.bintray.com/kotlinx" }
+    maven { url "https://kotlin.bintray.com/kotlin/kotlinx" }
+    maven { url "https://kotlin.bintray.com/ktor" }
+}
+
+dependencies {
+}
+
+task packForXCode(type: Sync) {
+    final File frameworkDir = new File(buildDir, "xcode-frameworks")
+    final String mode = project.findProperty("XCODE_CONFIGURATION")?.toUpperCase() 
+      ?: 'DEBUG'
+    final def binary = kotlin.targets.iOS.binaries.getFramework(mode)
+
+    inputs.property "mode", mode
+    dependsOn binary.linkTask
+
+    from { binary.outputFile.parentFile }
+    into frameworkDir
+
+    doLast {
+        new File(frameworkDir, 'gradlew').with {
+            text = "#!/bin/bash\nexport 'JAVA_HOME=${System.getProperty("java.home")}'\ncd '${rootProject.rootDir}'\n./gradlew \$@\n"
+            setExecutable(true)
+        }
+    }
+}
+
+tasks.build.dependsOn packForXCode
